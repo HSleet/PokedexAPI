@@ -1,4 +1,3 @@
-from pprint import pprint
 import sqlite3 as sql3
 import pandas as pd
 from flasgger import Swagger
@@ -115,7 +114,6 @@ def get_pokemon_by_id(db_id):
     
 @app.route("/pokemons/<pokedex_ref>")
 def get_pokemon_by_pokedex(pokedex_ref):
-    pprint(request.args.getlist("asd"))
     try:        
         pokedex_ref = int(pokedex_ref)
         query_condition = f"WHERE PokedexNumber == {pokedex_ref}"
