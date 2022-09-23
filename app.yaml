@@ -1,0 +1,6 @@
+runtime: python310
+
+handlers:
+
+- url: /.*
+  script: auto

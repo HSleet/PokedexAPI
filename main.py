@@ -1,4 +1,5 @@
 import sqlite3 as sql3
+import os
 import pandas as pd
 from flasgger import Swagger
 from markupsafe import escape
@@ -6,9 +7,9 @@ from flask import Flask, request, abort
 
 app = Flask(__name__)
 swagger = Swagger(app)
+home_dir = os.path.dirname(os.path.realpath(__file__))
 
-
-@app.route("/pokemons", methods=["GET"])
+@app.route("/pokemon", methods=["GET"])
 def get_all_pokemons():
     pokemon_filters = request.args
     type_filters = pokemon_filters.getlist("type",)
@@ -104,7 +105,7 @@ def get_all_pokemons():
     return pokemon_list
 
 
-@app.route("/pokemons/id/<db_id>")
+@app.route("/pokemon/id/<db_id>")
 def get_pokemon_by_id(db_id):
     db_id = int(db_id)
     query_condition = f"WHERE pokemonID == {db_id}"
@@ -112,7 +113,7 @@ def get_pokemon_by_id(db_id):
     return pokemon_list
     
     
-@app.route("/pokemons/<pokedex_ref>")
+@app.route("/pokemon/<pokedex_ref>")
 def get_pokemon_by_pokedex(pokedex_ref):
     try:        
         pokedex_ref = int(pokedex_ref)
@@ -242,4 +243,4 @@ def get_pokemon_data(query_condition: str = "") -> list:
     return pokemon_list
     
 if __name__ == "__main__":
-    app.run(debug=True)
+     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
