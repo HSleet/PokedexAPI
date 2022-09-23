@@ -8,10 +8,6 @@ from flask import Flask, request, jsonify, url_for, abort
 app = Flask(__name__)
 swagger = Swagger(app)
 
-@app.route("/")
-def home():
-    pass
-
 
 @app.route("/pokemons", methods=["GET"])
 def get_all_pokemons():
@@ -22,30 +18,10 @@ def get_all_pokemons():
     egg_groups = pokemon_filters.getlist("eggGroup")
     ability_filter = pokemon_filters.get("ability")
     if len(pokemon_filters) == 0:   # If no filter arg is given, returns the whole list of pokemons
-        query = f"""SELECT Pokemon.*,
-         t1.Type as "Pokemon Type 1",
-         t1.recordID as typeId1,
-         t2.Type as "Pokemon Type 2", 
-         t2.recordID as typeId2,
-         Regions.RecordID as regionID,
-         Regions."Region of Origin" as Region,
-         Games."Game(s) of Origin" as gameOfOrigin,
-         Games.RecordID as gameId
-        From Pokemon
-            left JOIN Types t1 ON PrimaryType == t1.RecordID 
-            left JOIN Types t2 ON SecondaryType == t2.RecordID 
-            LEFT JOIN Abilities a1 on PrimaryAbility == a1.RecordID
-            LEFT JOIN Abilities a2 on SecondaryAbility == a2.RecordID
-            LEFT JOIN Abilities a3 on HiddenAbility == a3.RecordID
-            LEFT JOIN Regions on RegionofOrigin == Regions.RecordID
-            LEFT JOIN EggGroups e1 on PrimaryEggGroup == e1.RecordID
-            LEFT JOIN EggGroups e2 on SecondaryEggGroup == e2.RecordID
-            LEFT JOIN Games on GameofOrigin == Games.RecordID
-        """
+        pokemon_list = get_pokemon_data()
     else:
         query_conditions = []                   # initialize query conditions list
         if type_filters:
-            pprint("here")
             if len(type_filters)==2:                # if 2 types are selected
                 types_condition = []                # initialize the conditional statement for the query
                 alternate_types_condition = []      # initialize the alternative conditional statement for the query
@@ -57,8 +33,7 @@ def get_all_pokemons():
                         pokemon_type = pokemon_type.capitalize()
                         types_condition.append(f"t1.Type == \"{pokemon_type}\"")    # If the args could not be converted to integers
                         alternate_types_condition.append(f"t2.Type == \"{pokemon_type}\"")  # Do the query with the pokemon type string
-                final_types_conditions = f"(({types_condition[0]} AND {alternate_types_condition[1]}) \
-                    OR ({types_condition[1]} AND {alternate_types_condition[0]}) )"
+                final_types_conditions = f"(({types_condition[0]} AND {alternate_types_condition[1]}) OR ({types_condition[1]} AND {alternate_types_condition[0]}))"
                 query_conditions.append(f"({final_types_conditions})")      # Appending the resulting condition statement to the list of conditions for the query
             
             elif len(type_filters)==1:         
@@ -125,91 +100,8 @@ def get_all_pokemons():
                 except ValueError:
                     query_conditions.append(f"(gameOfOrigin == \"{game_filter.capitalize()}\")")
         
-        query_conditions = " AND ".join(query_conditions)
-                            
-        query = f"""SELECT Pokemon.*,
-         t1.Type as "Pokemon Type 1",
-         t1.recordID as typeId1,
-         t2.Type as "Pokemon Type 2", 
-         t2.recordID as typeId2,
-         Regions.RecordID as regionID,
-         Regions."Region of Origin" as Region,
-         Games."Game(s) of Origin" as gameOfOrigin,
-         Games.RecordID as gameId
-        From Pokemon
-            left JOIN Types t1 ON PrimaryType == t1.RecordID 
-            left JOIN Types t2 ON SecondaryType == t2.RecordID 
-            LEFT JOIN Abilities a1 on PrimaryAbility == a1.RecordID
-            LEFT JOIN Abilities a2 on SecondaryAbility == a2.RecordID
-            LEFT JOIN Abilities a3 on HiddenAbility == a3.RecordID
-            LEFT JOIN Regions on RegionofOrigin == Regions.RecordID
-            LEFT JOIN EggGroups e1 on PrimaryEggGroup == e1.RecordID
-            LEFT JOIN EggGroups e2 on SecondaryEggGroup == e2.RecordID
-            LEFT JOIN Games on GameofOrigin == Games.RecordID
-            WHERE {query_conditions}
-        """
-        
-    with sql3.connect("./pokeDB.db") as conn:
-        # cur = conn.cursor()
-        # cur.execute(query)
-        # conn.commit()
-        # data = cur.fetchall()
-        df = pd.read_sql(query, conn)
-        pokemon_found = len(df)
-        if len(df) < 1:
-            abort(404, "No pokemon found with that reference")
-        pokemon_found = len(df)
-        df.drop(columns=["PrimaryType","SecondaryType",
-                         "PrimaryAbility","SecondaryAbility", "HiddenAbility", "SpecialEventAbility", "RegionofOrigin", 
-                         "GameofOrigin", "PrimaryEggGroup", "SecondaryEggGroup", ], inplace=True)
-        df = df.to_dict()
-        pokemon_list = []
-        for i in range(pokemon_found):
-            pokemon_data = {
-                "db_id": df["PokemonID"][i],
-                "Name":df["PokemonName"][i],
-                "originalPokemonID": df["OriginalPokemonID"][i],
-                "alternateForm": df["AlternateFormName"][i],
-                "legendaryType": df["LegendaryType"][i],
-                "pokedexSummary":{
-                    "pokedexNumber": df["PokedexNumber"][i],
-                    "gameOfOrigin":{
-                        "id": df["gameId"][i],
-                        "game": df["gameOfOrigin"][i],
-                    },
-                    "regionOfOrigin": {
-                        "id": df["regionID"][i],
-                        "region": df["Region"][i]
-                    },
-                    "types": {
-                        "primary":{
-                            "id": df["typeId1"][i],
-                            "type": df["Pokemon Type 1"][i]
-                        },
-                        "secondary": {
-                            "id": df["typeId2"][i],
-                            "type": df["Pokemon Type 2"][i]
-                        }  
-                    },              
-                },
-            
-            }
-            pokemon_list.append(pokemon_data)        
-        # pokemon_list = [
-        #     {
-        #         "pokemonID":pokemon[0],
-        #         "pokedex_number":pokemon[1],
-        #         "pokemon_name":pokemon[2],
-        #         "alternate_form_name":pokemon[3],
-        #         "primary_type":pokemon[4],
-        #         "secondary_type":pokemon[5]
-        #      } 
-        #     for pokemon in df
-        # ]
-        # results = {
-        #         "count": len(pokemon_list),
-        #         "data": pokemon_list                
-        # }
+        query_conditions = "WHERE " + " AND ".join(query_conditions)
+        pokemon_list = get_pokemon_data(query_condition=query_conditions) 
     return pokemon_list
 
 
@@ -217,34 +109,6 @@ def get_all_pokemons():
 def get_pokemon_by_id(db_id):
     db_id = int(db_id)
     query_condition = f"WHERE pokemonID == {db_id}"
-    query = f"""SELECT Pokemon.*,
-         t1.Type as primary_type,
-         t2.Type as secondary_type, 
-         a1.RecordID as abilityID_1,
-         a1.Ability as primary_ability, 
-         a1.description as primary_ability_description, 
-         a2.RecordID as abilityID_2,
-         a2.Ability as secondary_ability, 
-         a2.description as secondary_ability_description, 
-         a1.RecordID as hidden_abilityID,
-         a3.Ability as hidden_ability,
-         a3.description as hidden_ability_description, 
-         "Region of Origin" as region_of_origin,
-         e1."Egg Group" as primary_egg_group,
-         e2."Egg Group" as secondary_egg_group,
-         "Game(s) of Origin" as game_of_origin
-        From Pokemon
-            left JOIN Types t1 ON PrimaryType == t1.RecordID 
-            left JOIN Types t2 ON SecondaryType == t2.RecordID 
-            LEFT JOIN Abilities a1 on PrimaryAbility == a1.RecordID
-            LEFT JOIN Abilities a2 on SecondaryAbility == a2.RecordID
-            LEFT JOIN Abilities a3 on HiddenAbility == a3.RecordID
-            LEFT JOIN Regions on RegionofOrigin == Regions.RecordID
-            LEFT JOIN EggGroups e1 on PrimaryEggGroup == e1.RecordID
-            LEFT JOIN EggGroups e2 on SecondaryEggGroup == e2.RecordID
-            LEFT JOIN Games on GameofOrigin == Games.RecordID
-        {query_condition}
-    """
     pokemon_list = get_pokemon_data(query_condition=query_condition)[0]
     return pokemon_list
     
@@ -260,94 +124,11 @@ def get_pokemon_by_pokedex(pokedex_ref):
         query_condition = f"WHERE PokemonName == \"{pokemon_name}\";"
     finally:
         pokemon_list = get_pokemon_data(query_condition=query_condition)
-        # with sql3.connect("./pokeDB.db") as conn:
-        #     df = pd.read_sql(query, conn)
-        #     if len(df) < 1:
-        #         abort(404, "No pokemon found with that reference")
-        #     pokemon_found = len(df)
-        #     df.drop(columns=["PrimaryType","SecondaryType","PrimaryAbility","SecondaryAbility", "HiddenAbility", "SpecialEventAbility", "RegionofOrigin", "GameofOrigin", "PrimaryEggGroup", "SecondaryEggGroup", ], inplace=True)
-        #     df = df.to_dict()
-        #     pokemon_list = []
-        #     for i in range(pokemon_found):
-        #         pokemon_data = {
-        #             i: {
-        #                 "id": df["PokemonID"][i],
-        #                 "Name":df["PokemonName"][i],
-        #                 "legendaryType": df["LegendaryType"][i],
-        #                 "originalPokemonID": df["OriginalPokemonID"][i],
-        #                 "alternateForm": df["AlternateFormName"][i],
-        #                 "legendaryType": df["LegendaryType"][i],
-        #                 "pokedexInfo":{
-        #                     "pokedexNumber": df["PokedexNumber"][i],
-        #                     "category": df["Classification"][i],
-        #                     "height":df["PokemonHeight"][i],
-        #                     "weight": df["PokemonWeight"][i],
-        #                     "gameOfOrigin": df["game_of_origin"][i],
-        #                     "regionOfOrigin": df["region_of_origin"][i],
-        #                     "types": {
-        #                         "primary":df["primary_type"][i],
-        #                         "secondary":df["secondary_type"][i]    
-        #                     },
-        #                     "abilities": {
-        #                         "primary": {
-        #                             "ability": df["primary_ability"][i],
-        #                             "description": df["primary_ability_description"][i]
-        #                         },
-        #                         "secondary": {
-        #                             "ability": df["secondary_ability"][i],
-        #                             "description": df["secondary_ability_description"][i]
-        #                         },
-        #                         "hidden": {
-        #                             "id": df["hidden_abilityID"][i],
-        #                             "ability": df["hidden_ability"][i],
-        #                             "description": df["hidden_ability_description"][i]
-        #                         },                  
-        #                     }
-        #                 },               
-        #                 "training":{
-        #                     "catchRate": df["CatchRate"][i],
-        #                     "baseHappiness": df["BaseHappiness"][i],
-        #                     "evolutionInfo": {
-        #                         "previousEvolutionID": df["PreEvolutionPokemonId"][i],
-        #                         "experienceGrowthTotal": df["ExperienceGrowthTotal"][i],
-        #                         "evolutionDetails": df["EvolutionDetails"][i],
-        #                         "experienceYield": df["EvolutionDetails"][i],
-        #                     },
-        #                     "evYield": {
-        #                         "health": df["HealthEV"][i],
-        #                         "attack": df["AttackEV"][i],
-        #                         "defense": df["DefenseEV"][i],
-        #                         "spAttack": df["SpecialAttackEV"][i],
-        #                         "spDefense": df["SpecialDefenseEV"][i],
-        #                         "speed": df["SpeedEV"][i],
-        #                     },
-        #                     "catchRate": df["CatchRate"][i],                    
-        #                 },
-        #                 "baseStats": {
-        #                     "health": df["HealthStat"][i],
-        #                     "attack": df["AttackStat"][i],
-        #                     "defense": df["DefenseStat"][i],
-        #                     "spAttack": df["SpecialAttackStat"][i],
-        #                     "spDefense": df["SpecialDefenseStat"][i],
-        #                     "speed": df["SpeedStat"][i],
-        #                 },
-        #                 "breeding":{
-        #                     "eggCycleCount": df["EggCycleCount"][i],
-        #                     "femaleRatio": df["FemaleRatio"][i],
-        #                     "maleRatio": df["MaleRatio"][i],
-        #                     "eggGroup": {
-        #                         "primary": df["primary_egg_group"][i],
-        #                         "secondary": df["secondary_egg_group"][i]
-        #                     }
-        #                 },
-        #             }        
-        #         } 
-        #         pokemon_list.append(pokemon_data)        
         return pokemon_list
 
 
 
-def get_pokemon_data(query_condition: str) -> list:
+def get_pokemon_data(query_condition: str = "") -> list:
     query = f"""SELECT Pokemon.*,
          t1.Type as primary_type,
          t2.Type as secondary_type, 
@@ -357,7 +138,7 @@ def get_pokemon_data(query_condition: str) -> list:
          a2.RecordID as abilityID_2,
          a2.Ability as secondary_ability, 
          a2.description as secondary_ability_description, 
-         a1.RecordID as hidden_abilityID,
+         a3.RecordID as hidden_abilityID,
          a3.Ability as hidden_ability,
          a3.description as hidden_ability_description, 
          "Region of Origin" as region_of_origin,
@@ -386,79 +167,80 @@ def get_pokemon_data(query_condition: str) -> list:
         pokemon_list = []
         for i in range(pokemon_found):
             pokemon_data = {
-                i: {
-                    "id": df["PokemonID"][i],
-                    "Name":df["PokemonName"][i],
-                    "legendaryType": df["LegendaryType"][i],
-                    "originalPokemonID": df["OriginalPokemonID"][i],
-                    "alternateForm": df["AlternateFormName"][i],
-                    "legendaryType": df["LegendaryType"][i],
-                    "pokedexInfo":{
-                        "pokedexNumber": df["PokedexNumber"][i],
-                        "category": df["Classification"][i],
-                        "height":df["PokemonHeight"][i],
-                        "weight": df["PokemonWeight"][i],
-                        "gameOfOrigin": df["game_of_origin"][i],
-                        "regionOfOrigin": df["region_of_origin"][i],
-                        "types": {
-                            "primary":df["primary_type"][i],
-                            "secondary":df["secondary_type"][i]    
-                        },
-                        "abilities": {
-                            "primary": {
-                                "ability": df["primary_ability"][i],
-                                "description": df["primary_ability_description"][i]
-                            },
-                            "secondary": {
-                                "ability": df["secondary_ability"][i],
-                                "description": df["secondary_ability_description"][i]
-                            },
-                            "hidden": {
-                                "id": df["hidden_abilityID"][i],
-                                "ability": df["hidden_ability"][i],
-                                "description": df["hidden_ability_description"][i]
-                            },                  
-                        }
-                    },               
-                    "training":{
-                        "catchRate": df["CatchRate"][i],
-                        "baseHappiness": df["BaseHappiness"][i],
-                        "evolutionInfo": {
-                            "previousEvolutionID": df["PreEvolutionPokemonId"][i],
-                            "experienceGrowthTotal": df["ExperienceGrowthTotal"][i],
-                            "evolutionDetails": df["EvolutionDetails"][i],
-                            "experienceYield": df["EvolutionDetails"][i],
-                        },
-                        "evYield": {
-                            "health": df["HealthEV"][i],
-                            "attack": df["AttackEV"][i],
-                            "defense": df["DefenseEV"][i],
-                            "spAttack": df["SpecialAttackEV"][i],
-                            "spDefense": df["SpecialDefenseEV"][i],
-                            "speed": df["SpeedEV"][i],
-                        },
-                        "catchRate": df["CatchRate"][i],                    
+                "id": df["PokemonID"][i],
+                "Name":df["PokemonName"][i],
+                "legendaryType": df["LegendaryType"][i],
+                "originalPokemonID": df["OriginalPokemonID"][i],
+                "alternateForm": df["AlternateFormName"][i],
+                "legendaryType": df["LegendaryType"][i],
+                "pokedexInfo":{
+                    "pokedexNumber": df["PokedexNumber"][i],
+                    "category": df["Classification"][i],
+                    "height":df["PokemonHeight"][i],
+                    "weight": df["PokemonWeight"][i],
+                    "gameOfOrigin": df["game_of_origin"][i],
+                    "regionOfOrigin": df["region_of_origin"][i],
+                    "types": {
+                        "primary":df["primary_type"][i],
+                        "secondary":df["secondary_type"][i]    
                     },
-                    "baseStats": {
-                        "health": df["HealthStat"][i],
-                        "attack": df["AttackStat"][i],
-                        "defense": df["DefenseStat"][i],
-                        "spAttack": df["SpecialAttackStat"][i],
-                        "spDefense": df["SpecialDefenseStat"][i],
-                        "speed": df["SpeedStat"][i],
+                    "abilities": {
+                        "primary": {
+                            "id": df["abilityID_1"][i],
+                            "ability": df["primary_ability"][i],
+                            "description": df["primary_ability_description"][i]
+                        },
+                        "secondary": {
+                            "id": df["abilityID_2"][i],
+                            "ability": df["secondary_ability"][i],
+                            "description": df["secondary_ability_description"][i]
+                        },
+                        "hidden": {
+                            "id": df["hidden_abilityID"][i],
+                            "ability": df["hidden_ability"][i],
+                            "description": df["hidden_ability_description"][i]
+                        },                  
+                    }
+                },               
+                "training":{
+                    "catchRate": df["CatchRate"][i],
+                    "baseHappiness": df["BaseHappiness"][i],
+                    "evolutionInfo": {
+                        "previousEvolutionID": df["PreEvolutionPokemonId"][i],
+                        "experienceGrowthTotal": df["ExperienceGrowthTotal"][i],
+                        "evolutionDetails": df["EvolutionDetails"][i],
+                        "experienceYield": df["EvolutionDetails"][i],
                     },
-                    "breeding":{
-                        "eggCycleCount": df["EggCycleCount"][i],
-                        "femaleRatio": df["FemaleRatio"][i],
-                        "maleRatio": df["MaleRatio"][i],
-                        "eggGroup": {
-                            "primary": df["primary_egg_group"][i],
-                            "secondary": df["secondary_egg_group"][i]
-                        }
+                    "evYield": {
+                        "health": df["HealthEV"][i],
+                        "attack": df["AttackEV"][i],
+                        "defense": df["DefenseEV"][i],
+                        "spAttack": df["SpecialAttackEV"][i],
+                        "spDefense": df["SpecialDefenseEV"][i],
+                        "speed": df["SpeedEV"][i],
                     },
-                }        
-            } 
-            pokemon_list.append(pokemon_data)        
+                    "catchRate": df["CatchRate"][i],                    
+                },
+                "baseStats": {
+                    "health": df["HealthStat"][i],
+                    "attack": df["AttackStat"][i],
+                    "defense": df["DefenseStat"][i],
+                    "spAttack": df["SpecialAttackStat"][i],
+                    "spDefense": df["SpecialDefenseStat"][i],
+                    "speed": df["SpeedStat"][i],
+                },
+                "breeding":{
+                    "eggCycleCount": df["EggCycleCount"][i],
+                    "femaleRatio": df["FemaleRatio"][i],
+                    "maleRatio": df["MaleRatio"][i],
+                    "eggGroup": {
+                        "primary": df["primary_egg_group"][i],
+                        "secondary": df["secondary_egg_group"][i]
+                    }
+                },
+            }        
+             
+            pokemon_list.append(pokemon_data)
     return pokemon_list
     
 if __name__ == "__main__":
