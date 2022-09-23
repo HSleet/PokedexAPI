@@ -3,7 +3,7 @@ import sqlite3 as sql3
 import pandas as pd
 from flasgger import Swagger
 from markupsafe import escape
-from flask import Flask, request, jsonify, url_for, abort
+from flask import Flask, request, abort
 
 app = Flask(__name__)
 swagger = Swagger(app)
